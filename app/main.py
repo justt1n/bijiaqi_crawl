@@ -1,5 +1,13 @@
 import os
 import platform
+from GetDrive import downloadDrive
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from dotenv import load_dotenv
+from selenium import webdriver
+
+gspread = None
+driver = None
 
 
 def check_system():
@@ -15,20 +23,21 @@ def get_drive():
     system = check_system()
     if (system == "linux"):
         print("Open drive for linux...")
-        # TODO: Open drive for linux
     elif (system == "windows"):
         print("Open drive for windows...")
-        # TODO: Open drive for windows
     elif (system == "darwin"):
         print("Open drive for mac...")
-        # TODO: Open drive for mac
-    # TODO return drive
+    else:
+        return None
+    downloadDrive(system)
+
     return None
 
 
-def get_gspread():
-    # TODO: Open gspread
-    pass
+def get_gspread(keypath="key.json"):
+    creds = ServiceAccountCredentials.from_json_keyfile_name(keypath)
+    client = gspread.authorize(creds)
+    return client
 
 
 def clear_screen():
@@ -71,11 +80,11 @@ def do_payload():
     pass
 
 
-def main():
+if __name__ == "__main__":
+    load_dotenv('settings.env')
     driver = get_drive()
-    gspread = get_gspread()
-    the_url = "https://"
-    driver.get(the_url)
+    gspread = get_gspread(os.getenv('KEY_PATH'))
+    driver.get(os.getenv('DEFAULT_URL'))
     while (True):
         clear_screen()
         process(driver, gspread)

@@ -11,7 +11,7 @@ def check_system():
         exit(1)
     return system
 
-def getDrive(os_type='windows'):
+def downloadDrive(os_type='windows'):
     windowsUrl = "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_win32.zip"
     
     link = {
@@ -47,4 +47,4 @@ def getDrive(os_type='windows'):
 
 if __name__ == "__main__":
     os_type = check_system()
-    getDrive(os_type)
+    downloadDrive(os_type)
