@@ -3,6 +3,7 @@ import os
 import zipfile
 import platform
 
+
 def check_system():
     system = platform.system().lower()
     supported_systems = ["linux", "windows", "darwin"]
@@ -11,39 +12,48 @@ def check_system():
         exit(1)
     return system
 
+
 def downloadDrive(os_type='windows'):
-    windowsUrl = "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_win32.zip"
-    
-    link = {
+    # Define URLs and paths for different OS types
+    links = {
         'windows': {
             "url": "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_win32.zip",
-            "path": "../storage/windows.zip"
+            "path": os.path.join('..', 'storage', 'windows.zip')
         },
         'linux': {
             "url": "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip",
-            "path": "../storage/linux.zip"
+            "path": os.path.join('..', 'storage', 'linux.zip')
         },
         'darwin': {
             "url": "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_mac64.zip",
-            "path": "../storage/mac.zip"
+            "path": os.path.join('..', 'storage', 'mac.zip')
         }
     }
-    
-    url = link[os_type]['url']
-    zip_path = link[os_type]['path']
-    
+
+    if os_type not in links:
+        raise ValueError(f"Unsupported OS type: {os_type}")
+
+    url = links[os_type]['url']
+    zip_path = links[os_type]['path']
+
+    print('Start downloading driver...')
+
     # Ensure the storage directory exists
     os.makedirs(os.path.dirname(zip_path), exist_ok=True)
-    
+
+    # Download the file
     wget.download(url, zip_path)
-    
+
+    # Extract the downloaded zip file
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall('../storage/')
-    
+        zip_ref.extractall(os.path.join('..', 'storage'))
+
+    # Remove the zip file after extraction
     os.remove(zip_path)
-    
-    print('Model downloaded and unzipped')
-    return 'Model downloaded and unzipped'
+
+    print('Driver downloaded and unzipped')
+    return os.path.join('..', 'storage', 'chromedriver')
+
 
 if __name__ == "__main__":
     os_type = check_system()

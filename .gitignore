@@ -3,3 +3,4 @@ logs
 .idea
 .vscodetmp
 key.json
+storage/chromedriver-win64
