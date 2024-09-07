@@ -23,6 +23,14 @@ import time
 gsp = None
 driver = None
 HOST_DATA = None
+
+def print_function_name(func):
+    def wrapper(*args, **kwargs):
+        print(f"Calling function: {func.__name__}")
+        return func(*args, **kwargs)
+    return wrapper
+
+@print_function_name
 def check_system():
     system = platform.system().lower()
     supported_systems = ["linux", "windows", "darwin"]
@@ -31,6 +39,7 @@ def check_system():
         exit(1)
     return system
 
+@print_function_name
 def read_file_with_encoding(file_path, encoding='utf-8'):
     try:
         with codecs.open(file_path, 'r', encoding=encoding) as file:
@@ -58,6 +67,7 @@ links = {
     }
 }
 
+@print_function_name
 def downloadDrive(os_type='windows'):
     if os_type not in links:
         raise ValueError(f"Unsupported OS type: {os_type}")
@@ -84,6 +94,7 @@ def downloadDrive(os_type='windows'):
     return driver_path
 
 
+@print_function_name
 def get_drive():
     system = check_system()
     if system not in links:
@@ -107,6 +118,7 @@ def get_gspread(keypath="key.json"):
     return client
 
 
+@print_function_name
 def clear_screen():
     system = check_system()
     if system == "linux" or system == "darwin":
@@ -115,6 +127,7 @@ def clear_screen():
         os.system('cls')
 
 
+@print_function_name
 def read_data_from_sheet():
     def append_index_to_sheet_data(sheet_data):
         for index, row in enumerate(sheet_data):
@@ -128,6 +141,7 @@ def read_data_from_sheet():
     return data
 
 
+@print_function_name
 def extract_data(data):
     data = data
     payloads = []
@@ -137,6 +151,7 @@ def extract_data(data):
     return payloads
 
 
+@print_function_name
 def write_data_to_sheet(data, line_number):
     try:
         # Ensure line_number is an integer
@@ -156,7 +171,8 @@ def write_data_to_sheet(data, line_number):
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 
-def process(driver, gspread):
+@print_function_name
+def process():
     # TODO: Read data from sheet and turn into payload
     sheet_data = read_data_from_sheet()
     payloads = extract_data(sheet_data)
@@ -169,6 +185,27 @@ def process(driver, gspread):
             print(f"Match written to sheet at row {payload_data.sheet_row}")
 
 
+def get_cell_text(cell, retries=3):
+    while retries > 0:
+        try:
+            return cell.text
+        except StaleElementReferenceException:
+            retries -= 1
+            if retries == 0:
+                raise
+            time.sleep(0.5)
+
+def get_row_elements(row, retries=3):
+    while retries > 0:
+        try:
+            return row.find_elements(By.TAG_NAME, 'td')
+        except StaleElementReferenceException:
+            retries -= 1
+            if retries == 0:
+                raise
+            time.sleep(0.5)
+
+@print_function_name
 def do_payload(payload: Payload.Payload):
     if int(payload.check) == 0:
         return
@@ -186,13 +223,14 @@ def do_payload(payload: Payload.Payload):
     while retries > 0:
         try:
             table = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'td table.tb.bijia.limit')))
-            more_row = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'tr.more')))
-            more_row.click()
+            more_row = driver.find_element(By.XPATH, "//tr[@class='more']")
+            driver.execute_script("arguments[0].click();", more_row)
             break
         except StaleElementReferenceException:
             retries -= 1
             if retries == 0:
                 raise
+            time.sleep(0.5)
 
     data_array = []
 
@@ -200,21 +238,17 @@ def do_payload(payload: Payload.Payload):
     for row in table.find_elements(By.CSS_SELECTOR, 'tr.tb_head'):
         header.append(row.text)
 
-    for row in table.find_elements(By.CSS_SELECTOR, 'tr.row'):
-        row_data = []
-        for cell in row.find_elements(By.TAG_NAME, 'td'):
-            row_data.append(cell.text)
-
     for row in table.find_elements(By.TAG_NAME, 'tr'):
         row_data = []
-        for cell in row.find_elements(By.TAG_NAME, 'td'):
-            if cell.text == " ":
+        for cell in get_row_elements(row):
+            cell_text = get_cell_text(cell)
+            if cell_text == " ":
                 continue
-            elif cell.text == "卖给他":
+            elif cell_text == "卖给他":
                 link_element = cell.find_elements(By.TAG_NAME, 'a')[1]
                 row_data.append(link_element.get_attribute('href'))
             else:
-                row_data.append(cell.text)
+                row_data.append(cell_text)
         data_array.append(row_data)
 
     data_array = data_array[3:-2]
@@ -233,13 +267,28 @@ def do_payload(payload: Payload.Payload):
     return ans
 
 
-
+@print_function_name
 def get_hostname_by_hostid(data, hostid):
     for entry in data:
         if entry['hostid'] == str(hostid):
             return entry['hostname']
     return None
 
+
+@print_function_name
+def open_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Chạy Chrome ở chế độ headless
+    chrome_options.add_argument("--no-sandbox")
+    chrome_service = Service(executable_path=driver_path)
+
+    try:
+        driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+    except Exception as e:
+        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
+
+    driver.get(os.getenv('DEFAULT_URL'))
+    return driver
 
 if __name__ == "__main__":
     load_dotenv('settings.env')
@@ -249,19 +298,11 @@ if __name__ == "__main__":
 
     sheet_data = read_data_from_sheet()
     payloads = extract_data(sheet_data)
-    chrome_options = Options()
-    chrome_options.add_experimental_option("detach", True)
-
-    chrome_service = Service(executable_path=driver_path)
-
-    try:
-        driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
-    except Exception as e:
-        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
+    driver = open_driver()
 
     driver.get(os.getenv('DEFAULT_URL'))
     while (True):
         clear_screen()
-        process(driver, gspread)
+        process()
         break
 
