@@ -10,25 +10,51 @@ from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import StaleElementReferenceException
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import Payload
 import time
+import logging
+from datetime import datetime
 
+load_dotenv('settings.env')
 gsp = None
 driver = None
 HOST_DATA = None
 
+def setup_logging():
+    # Load environment variables at the beginning of the script
+    load_dotenv('settings.env')
+
+    # Configure logging from environment variables
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    log_format = os.getenv('LOG_FORMAT', '%(asctime)s - %(message)s')
+
+    # Create log file based on the current date in the logs/ directory
+    log_dir = 'logs'
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f"{datetime.now().strftime('%Y-%m-%d')}_function_calls.log")
+
+    logging.basicConfig(filename=log_file, level=log_level, format=log_format)
+
+setup_logging()
+
 def print_function_name(func):
     def wrapper(*args, **kwargs):
-        print(f"Calling function: {func.__name__}")
-        return func(*args, **kwargs)
+        try:
+            log_message = f"Calling function: {func.__name__}"
+            logging.info(log_message)
+            return func(*args, **kwargs)
+        except Exception as e:
+            logging.error(f"Error in function {func.__name__}: {e}")
+            raise
+
     return wrapper
+
 
 @print_function_name
 def check_system():
@@ -39,6 +65,7 @@ def check_system():
         exit(1)
     return system
 
+
 @print_function_name
 def read_file_with_encoding(file_path, encoding='utf-8'):
     try:
@@ -48,6 +75,7 @@ def read_file_with_encoding(file_path, encoding='utf-8'):
     except UnicodeDecodeError as e:
         print(f"Error decoding file: {e}")
         return None
+
 
 links = {
     'windows': {
@@ -66,6 +94,7 @@ links = {
         "driver": os.path.join('storage', 'chromedriver-mac-x64', 'chromedriver')
     }
 }
+
 
 @print_function_name
 def downloadDrive(os_type='windows'):
@@ -171,6 +200,7 @@ def write_data_to_sheet(data, line_number):
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 
+
 @print_function_name
 def process():
     # TODO: Read data from sheet and turn into payload
@@ -178,7 +208,7 @@ def process():
     payloads = extract_data(sheet_data)
     # TODO: Use selenium to use that data
     for payload_data in payloads:
-        ans = do_payload(payload_data)
+        ans = do_payload_with_retries(payload_data, retries=int(os.getenv('RETRIES_TIME')))
         if ans is not None:
             print(f"Found a match for {payload_data.name}")
             write_data_to_sheet(ans, payload_data.sheet_row)
@@ -186,14 +216,13 @@ def process():
 
 
 def get_cell_text(cell, retries=3):
-    while retries > 0:
+    for _ in range(retries):
         try:
             return cell.text
         except StaleElementReferenceException:
-            retries -= 1
-            if retries == 0:
-                raise
             time.sleep(0.5)
+    raise StaleElementReferenceException("Failed to get cell text after retries")
+
 
 def get_row_elements(row, retries=3):
     while retries > 0:
@@ -205,12 +234,50 @@ def get_row_elements(row, retries=3):
                 raise
             time.sleep(0.5)
 
+
+def find_link_element(cell, retries=3):
+    for _ in range(retries):
+        try:
+            return cell.find_elements(By.TAG_NAME, 'a')[1]
+        except StaleElementReferenceException:
+            time.sleep(0.5)
+    raise StaleElementReferenceException("Failed to find link element after retries")
+
+
+def get_link_attribute(link_element, attribute='href', retries=3):
+    for _ in range(retries):
+        try:
+            return link_element.get_attribute(attribute)
+        except StaleElementReferenceException:
+            time.sleep(0.5)
+    raise StaleElementReferenceException(f"Failed to get attribute '{attribute}' after retries")
+
+
+def get_row_elements_with_retries(row, retries=3):
+    for _ in range(retries):
+        try:
+            return row.find_elements(By.TAG_NAME, 'td')
+        except StaleElementReferenceException:
+            time.sleep(0.5)
+    raise StaleElementReferenceException("Failed to find row elements after retries")
+
+
+def find_elements_with_retries(parent_element, by, value, retries=3):
+    for _ in range(retries):
+        try:
+            return parent_element.find_elements(by, value)
+        except StaleElementReferenceException:
+            time.sleep(0.5)
+    raise StaleElementReferenceException(f"Failed to find elements by {by}='{value}' after retries")
+
+
 @print_function_name
 def do_payload(payload: Payload.Payload):
+    retries_time = int(os.getenv('RETRIES_TIME'))
     if int(payload.check) == 0:
         return
     host_id = payload.id
-    wait = WebDriverWait(driver, 3)
+    wait = WebDriverWait(driver, os.getenv('TIMEOUT'))
 
     host_id = str(host_id) + " "
     input_field = wait.until(EC.element_to_be_clickable((By.ID, 'speedhostname')))
@@ -219,7 +286,7 @@ def do_payload(payload: Payload.Payload):
     input_field.send_keys(Keys.ENTER)
     time.sleep(1)
 
-    retries = 10
+    retries = retries_time
     while retries > 0:
         try:
             table = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'td table.tb.bijia.limit')))
@@ -234,19 +301,19 @@ def do_payload(payload: Payload.Payload):
 
     data_array = []
 
-    header = []
-    for row in table.find_elements(By.CSS_SELECTOR, 'tr.tb_head'):
-        header.append(row.text)
+    # header = []
+    # for row in table.find_elements(By.CSS_SELECTOR, 'tr.tb_head'):
+    #     header.append(row.text)
 
-    for row in table.find_elements(By.TAG_NAME, 'tr'):
+    for row in find_elements_with_retries(table, By.TAG_NAME, 'tr', retries=retries_time):
         row_data = []
-        for cell in get_row_elements(row):
-            cell_text = get_cell_text(cell)
+        for cell in get_row_elements_with_retries(row, retries=retries_time):
+            cell_text = get_cell_text(cell, retries=retries_time)
             if cell_text == " ":
                 continue
             elif cell_text == "卖给他":
-                link_element = cell.find_elements(By.TAG_NAME, 'a')[1]
-                row_data.append(link_element.get_attribute('href'))
+                link_element = find_link_element(cell, retries=retries_time)
+                row_data.append(get_link_attribute(link_element, attribute='href', retries=retries_time))
             else:
                 row_data.append(cell_text)
         data_array.append(row_data)
@@ -276,33 +343,43 @@ def get_hostname_by_hostid(data, hostid):
 
 
 @print_function_name
-def open_driver():
+def open_driver_with_retries(retries=3):
     chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Chạy Chrome ở chế độ headless
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_service = Service(executable_path=driver_path)
 
-    try:
-        driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
-    except Exception as e:
-        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
+    for _ in range(retries):
+        try:
+            driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+            driver.get(os.getenv('DEFAULT_URL'))
+            return driver
+        except WebDriverException:
+            time.sleep(0.5)
+    raise WebDriverException("Failed to open driver and navigate to URL after retries")
 
-    driver.get(os.getenv('DEFAULT_URL'))
-    return driver
+
+def do_payload_with_retries(payload, retries=3):
+    for _ in range(retries):
+        try:
+            return do_payload(payload)
+        except (StaleElementReferenceException, WebDriverException) as e:
+            logging.error(f"Error in do_payload: {e}")
+            time.sleep(1)
+    raise Exception("Failed to execute do_payload after retries")
+
 
 if __name__ == "__main__":
-    load_dotenv('settings.env')
+    # load_dotenv('settings.env')
     driver_path = get_drive()
     gsp = get_gspread(os.getenv('KEY_PATH'))
     HOST_DATA = read_file_with_encoding(os.getenv('DATA_PATH'), encoding='utf-8')
 
     sheet_data = read_data_from_sheet()
     payloads = extract_data(sheet_data)
-    driver = open_driver()
+    driver = open_driver_with_retries(retries=int(os.getenv('RETRIES_TIME')))
 
-    driver.get(os.getenv('DEFAULT_URL'))
     while (True):
         clear_screen()
         process()
-        break
-
+        time.sleep(int(os.getenv('REFRESH_TIME')))
