@@ -203,10 +203,8 @@ def write_data_to_sheet(data, line_number):
 
 @print_function_name
 def process():
-    # TODO: Read data from sheet and turn into payload
     sheet_data = read_data_from_sheet()
     payloads = extract_data(sheet_data)
-    # TODO: Use selenium to use that data
     for payload_data in payloads:
         ans = do_payload_with_retries(payload_data, retries=int(os.getenv('RETRIES_TIME')))
         if ans is not None:
@@ -334,7 +332,6 @@ def do_payload(payload: Payload.Payload):
     return ans
 
 
-@print_function_name
 def get_hostname_by_hostid(data, hostid):
     for entry in data:
         if entry['hostid'] == str(hostid):
