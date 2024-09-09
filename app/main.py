@@ -286,12 +286,21 @@ def write_data_to_sheet(data, line_number, sheet_name):
         # Ensure line_number is an integer
         line_number = int(line_number)
         range_name = os.getenv('DESTINATION_RANGE').format(n=line_number)
+        inforange = os.getenv('INFORMATION_RANGE').format(n=line_number)
         spread_sheet_url = os.getenv('SPREAD_SHEET_URL')
         worksheet = gsp.open_by_url(spread_sheet_url).worksheet(sheet_name)
-
+        # Add datetime to the data
+        updated_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if data is None:
+            note = "Not Found"
+            infor = [note, updated_time]
+            worksheet.update(range_name=inforange, values=[infor])
+            return None
         # Convert data to a list of lists
-        data_list = [data.toArray()]
+        note = "Found"
+        data_list = [[note, updated_time] + data.toArray()]
 
+        # Update the data in the sheet
         worksheet.update(range_name=range_name, values=data_list)
     except ValueError as e:
         print(line_number)
@@ -311,6 +320,8 @@ def process(sheet_name):
             print(f"Found a match for {payload_data.name}")
             write_data_to_sheet(ans, payload_data.sheet_row, sheet_name)
             print(f"Match written to sheet at row {payload_data.sheet_row}")
+        else:
+            write_data_to_sheet(ans, payload_data.sheet_row, sheet_name)
 
 @print_function_name
 def multi_process():
