@@ -20,6 +20,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
 
 import Payload
 
@@ -27,7 +28,7 @@ load_dotenv('settings.env')
 gsp = None
 driver = None
 HOST_DATA = None
-
+BLACKLIST = None
 
 def setup_logging():
     # Load environment variables at the beginning of the script
@@ -128,6 +129,9 @@ def open_driver_with_retries(retries=3):
 
     for _ in range(retries):
         try:
+            if check_system() == "darwin":
+                driver_path2 = ChromeDriverManager().install()
+                chrome_service = Service(executable_path=driver_path2)
             driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
             driver.get(os.getenv('DEFAULT_URL'))
             return driver
@@ -240,7 +244,6 @@ def get_gspread(keypath="key.json"):
     return client
 
 
-@print_function_name
 def clear_screen():
     system = check_system()
     if system == "linux" or system == "darwin":
@@ -249,7 +252,6 @@ def clear_screen():
         os.system('cls')
 
 
-@print_function_name
 def read_data_from_sheet(sheet_name):
     def append_index_to_sheet_data(sheet_data):
         for index, row in enumerate(sheet_data):
@@ -262,8 +264,14 @@ def read_data_from_sheet(sheet_name):
     data = append_index_to_sheet_data(data)
     return data
 
+def get_blacklist_from_sheet():
+    spread_sheet = gsp.open_by_url(os.getenv('SPREAD_SHEET_URL')).worksheet(os.getenv('BLACKLIST_SHEET_NAME'))
+    data = spread_sheet.get_all_values()
+    data = data[1:]
+    flat_data = [item.lower() for sublist in data for item in sublist]
+    return flat_data
 
-@print_function_name
+
 def extract_data(data):
     data = data
     payloads = []
@@ -273,7 +281,6 @@ def extract_data(data):
     return payloads
 
 
-@print_function_name
 def write_data_to_sheet(data, line_number, sheet_name):
     try:
         # Ensure line_number is an integer
@@ -345,10 +352,6 @@ def do_payload(payload: Payload.Payload):
 
     data_array = []
 
-    # header = []
-    # for row in table.find_elements(By.CSS_SELECTOR, 'tr.tb_head'):
-    #     header.append(row.text)
-
     for row in find_elements_with_retries(table, By.TAG_NAME, 'tr', retries=retries_time):
         row_data = []
         for cell in get_row_elements_with_retries(row, retries=retries_time):
@@ -372,6 +375,10 @@ def do_payload(payload: Payload.Payload):
     for result in results:
         if result.type in payload.types:
             if payload.gd_min >= result.min_gold and payload.gd_max <= result.max_gold:
+                if result.username.lower() in BLACKLIST:
+                    print(f"User {result.username} is in the blacklist")
+                    logging.info(f"User {result.username} is in the blacklist")
+                    continue
                 ans = result
                 break
     input_field.clear()
@@ -395,5 +402,6 @@ if __name__ == "__main__":
 
     while (True):
         clear_screen()
+        BLACKLIST = get_blacklist_from_sheet()
         multi_process()
         time.sleep(int(os.getenv('REFRESH_TIME')))
