@@ -4,3 +4,4 @@ logs
 .vscodetmp
 key.json
 storage/chromedriver-win64
+settings.env
