@@ -69,7 +69,7 @@ def get_cell_text(cell, retries=3):
         try:
             return cell.text
         except StaleElementReferenceException:
-            time.sleep(0.5)
+            time.sleep(0.25)
     raise StaleElementReferenceException("Failed to get cell text after retries")
 
 
@@ -81,7 +81,7 @@ def get_row_elements(row, retries=3):
             retries -= 1
             if retries == 0:
                 raise
-            time.sleep(0.5)
+            time.sleep(0.25)
 
 
 def find_link_element(cell, retries=3):
@@ -89,7 +89,7 @@ def find_link_element(cell, retries=3):
         try:
             return cell.find_elements(By.TAG_NAME, 'a')[1]
         except StaleElementReferenceException:
-            time.sleep(0.5)
+            time.sleep(0.25)
     raise StaleElementReferenceException("Failed to find link element after retries")
 
 
@@ -98,7 +98,7 @@ def get_link_attribute(link_element, attribute='href', retries=3):
         try:
             return link_element.get_attribute(attribute)
         except StaleElementReferenceException:
-            time.sleep(0.5)
+            time.sleep(0.25)
     raise StaleElementReferenceException(f"Failed to get attribute '{attribute}' after retries")
 
 
@@ -107,7 +107,7 @@ def get_row_elements_with_retries(row, retries=3):
         try:
             return row.find_elements(By.TAG_NAME, 'td')
         except StaleElementReferenceException:
-            time.sleep(0.5)
+            time.sleep(0.25)
     raise StaleElementReferenceException("Failed to find row elements after retries")
 
 
@@ -116,7 +116,7 @@ def find_elements_with_retries(parent_element, by, value, retries=3):
         try:
             return parent_element.find_elements(by, value)
         except StaleElementReferenceException:
-            time.sleep(0.5)
+            time.sleep(0.25)
     raise StaleElementReferenceException(f"Failed to find elements by {by}='{value}' after retries")
 
 
@@ -136,7 +136,7 @@ def open_driver_with_retries(retries=3):
             driver.get(os.getenv('DEFAULT_URL'))
             return driver
         except WebDriverException:
-            time.sleep(0.5)
+            time.sleep(0.25)
     raise WebDriverException("Failed to open driver and navigate to URL after retries")
 
 
@@ -359,7 +359,7 @@ def do_payload(payload: Payload.Payload):
             retries -= 1
             if retries == 0:
                 raise
-            time.sleep(0.5)
+            time.sleep(0.25)
 
     data_array = []
 
@@ -386,7 +386,7 @@ def do_payload(payload: Payload.Payload):
     for result in results:
         if result.type in payload.types:
             if payload.gd_min >= result.min_gold and payload.gd_max <= result.max_gold:
-                if result.username.lower() in BLACKLIST:
+                if BLACKLIST is not None and result.username.lower() in BLACKLIST:
                     print(f"User {result.username} is in the blacklist")
                     logging.info(f"User {result.username} is in the blacklist")
                     continue
@@ -413,6 +413,9 @@ if __name__ == "__main__":
 
     while (True):
         clear_screen()
-        BLACKLIST = get_blacklist_from_sheet()
+        try:
+            BLACKLIST = get_blacklist_from_sheet()
+        except Exception as e:
+            logging.error(f"Error in get_blacklist_from_sheet: {e}")
         multi_process()
         time.sleep(int(os.getenv('REFRESH_TIME')))
