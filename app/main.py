@@ -264,13 +264,18 @@ def read_data_from_sheet(sheet_name):
     data = append_index_to_sheet_data(data)
     return data
 
-def get_blacklist_from_sheet():
-    spread_sheet = gsp.open_by_url(os.getenv('SPREAD_SHEET_URL')).worksheet(os.getenv('BLACKLIST_SHEET_NAME'))
-    data = spread_sheet.get_all_values()
-    data = data[1:]
-    flat_data = [item.lower() for sublist in data for item in sublist]
-    return flat_data
-
+def get_blacklist_from_sheet(retries=3):
+    for _ in range(retries):
+        try:
+            spread_sheet = gsp.open_by_url(os.getenv('SPREAD_SHEET_URL')).worksheet(os.getenv('BLACKLIST_SHEET_NAME'))
+            data = spread_sheet.get_all_values()
+            data = data[1:]
+            flat_data = [item.lower() for sublist in data for item in sublist]
+            return flat_data
+        except Exception as e:
+            print(f"An error occurred: {e}. Retrying...")
+            time.sleep(1)
+    raise Exception("Failed to get blacklist from sheet after retries")
 
 def extract_data(data):
     data = data
@@ -414,7 +419,7 @@ if __name__ == "__main__":
     while (True):
         clear_screen()
         try:
-            BLACKLIST = get_blacklist_from_sheet()
+            BLACKLIST = get_blacklist_from_sheet(os.getenv('RETRIES_TIME'))
         except Exception as e:
             logging.error(f"Error in get_blacklist_from_sheet: {e}")
         multi_process()
