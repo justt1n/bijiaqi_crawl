@@ -129,9 +129,6 @@ def open_driver_with_retries(retries=3):
 
     for _ in range(retries):
         try:
-            if check_system() == "darwin":
-                driver_path2 = ChromeDriverManager().install()
-                chrome_service = Service(executable_path=driver_path2)
             driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
             driver.get(os.getenv('DEFAULT_URL'))
             return driver
@@ -226,15 +223,10 @@ def get_drive():
     if system not in links:
         raise ValueError(f"Unsupported OS type: {system}")
 
-    driver_path = links[system]['driver']
-
-    if os.path.exists(driver_path):
-        print(f"Driver already exists at {driver_path}")
-        return driver_path
-
     print(f"Downloading driver for {system}...")
-    path = downloadDrive(system)
-    return path
+    _driver_path = ChromeDriverManager().install()
+
+    return _driver_path
 
 
 def get_gspread(keypath="key.json"):

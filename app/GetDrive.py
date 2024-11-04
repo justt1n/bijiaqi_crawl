@@ -17,15 +17,15 @@ def downloadDrive(os_type='windows'):
     # Define URLs and paths for different OS types
     links = {
         'windows': {
-            "url": "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_win32.zip",
+            "url": "https://storage.googleapis.com/chrome-for-testing-public/130.0.6723.91/win32/chromedriver-win32.zip",
             "path": os.path.join('..', 'storage', 'windows.zip')
         },
         'linux': {
-            "url": "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip",
+            "url": "https://storage.googleapis.com/chrome-for-testing-public/130.0.6723.91/linux64/chromedriver-linux64.zip",
             "path": os.path.join('..', 'storage', 'linux.zip')
         },
         'darwin': {
-            "url": "https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_mac64.zip",
+            "url": "https://storage.googleapis.com/chrome-for-testing-public/130.0.6723.91/mac-x64/chromedriver-mac-x64.zip",
             "path": os.path.join('..', 'storage', 'mac.zip')
         }
     }
