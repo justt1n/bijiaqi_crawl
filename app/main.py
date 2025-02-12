@@ -30,6 +30,7 @@ driver = None
 HOST_DATA = None
 BLACKLIST = None
 
+
 def setup_logging():
     # Load environment variables at the beginning of the script
     load_dotenv('settings.env')
@@ -256,6 +257,7 @@ def read_data_from_sheet(sheet_name):
     data = append_index_to_sheet_data(data)
     return data
 
+
 def get_blacklist_from_sheet(retries=3):
     for _ in range(retries):
         try:
@@ -268,6 +270,7 @@ def get_blacklist_from_sheet(retries=3):
             print(f"An error occurred: {e}. Retrying...")
             time.sleep(1)
     raise Exception("Failed to get blacklist from sheet after retries")
+
 
 def extract_data(data):
     data = data
@@ -320,6 +323,7 @@ def process(sheet_name):
         else:
             write_data_to_sheet(ans, payload_data.sheet_row, sheet_name)
 
+
 @print_function_name
 def multi_process():
     sheets = os.getenv('SHEET_NAMES').split(',')
@@ -329,6 +333,7 @@ def multi_process():
         except Exception as e:
             logging.error(f"Error in process: {e}")
             driver.refresh()
+
 
 @print_function_name
 def do_payload(payload: Payload.Payload):
@@ -401,17 +406,16 @@ def get_hostname_by_hostid(data, hostid):
 
 
 if __name__ == "__main__":
-    # load_dotenv('settings.env')
+    load_dotenv('settings.env')
     driver_path = get_drive()
     gsp = get_gspread(os.getenv('KEY_PATH'))
     HOST_DATA = read_file_with_encoding(os.getenv('DATA_PATH'), encoding='utf-8')
 
     driver = open_driver_with_retries(retries=int(os.getenv('RETRIES_TIME')))
-
-    while (True):
+    while True:
         clear_screen()
         try:
-            BLACKLIST = get_blacklist_from_sheet(os.getenv('RETRIES_TIME'))
+            BLACKLIST = get_blacklist_from_sheet()
         except Exception as e:
             logging.error(f"Error in get_blacklist_from_sheet: {e}")
         multi_process()
