@@ -124,7 +124,6 @@ def find_elements_with_retries(parent_element, by, value, retries=3):
 @print_function_name
 def open_driver_with_retries(retries=3):
     chrome_options = Options()
-    chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--log-level=3")
     chrome_service = Service(executable_path=driver_path)
 
