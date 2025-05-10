@@ -299,8 +299,12 @@ def extract_data(data):
     data = data
     payloads = []
     for data_row in data:
-        data_row[2] = get_hostname_by_hostid(HOST_DATA, data_row[2])
-        payloads.append(Payload.Payload(data_row))
+        try:
+            data_row[2] = get_hostname_by_hostid(HOST_DATA, data_row[2])
+            payloads.append(Payload.Payload(data_row))
+        except Exception as e:
+            logging.error(f"An error occurred: {e}")
+            continue
     return payloads
 
 
