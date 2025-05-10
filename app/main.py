@@ -130,6 +130,7 @@ def open_driver_with_retries(retries=3):
     chrome_options.add_argument("--disable-gpu") # Vẫn nên giữ lại cho headless
     chrome_options.add_argument("--window-size=1920,1080") # Đặt kích thước cửa sổ ảo
     chrome_options.add_argument("--disable-dawn-features=use_d3d12")
+    chrome_options.add_argument("--log-level=3")
     # Thêm User-Agent nếu cần thiết
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" # Ví dụ
     chrome_options.add_argument(f'user-agent={user_agent}')
