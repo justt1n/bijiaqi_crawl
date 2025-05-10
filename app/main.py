@@ -124,20 +124,39 @@ def find_elements_with_retries(parent_element, by, value, retries=3):
 @print_function_name
 def open_driver_with_retries(retries=3):
     chrome_options = Options()
+    chrome_options.add_argument("--headless=new") # Sử dụng chế độ headless mới
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-gpu") # Vẫn nên giữ lại cho headless
+    chrome_options.add_argument("--window-size=1920,1080") # Đặt kích thước cửa sổ ảo
+    # Thêm User-Agent nếu cần thiết
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" # Ví dụ
+    chrome_options.add_argument(f'user-agent={user_agent}')
+
+    # driver_path được định nghĩa global trong __main__
     chrome_service = Service(executable_path=driver_path)
 
-    for _ in range(retries):
+    local_driver = None # Sử dụng biến cục bộ
+    for i in range(retries):
         try:
-            driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
-            driver.minimize_window()
-            driver.get(os.getenv('DEFAULT_URL'))
-            return driver
-        except WebDriverException:
-            time.sleep(0.25)
+            print(f"Attempting to open driver (headless), attempt {i+1}/{retries}")
+            local_driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+            print(f"Driver opened. Navigating to {os.getenv('DEFAULT_URL')}")
+            local_driver.get(os.getenv('DEFAULT_URL'))
+            print("Navigation successful.")
+            return local_driver
+        except WebDriverException as e:
+            print(f"WebDriverException on attempt {i+1}: {e}")
+            if local_driver:
+                local_driver.quit()
+            if i < retries - 1:
+                time.sleep(1) # Tăng thời gian chờ giữa các lần thử
+            else:
+                logging.error(f"Failed to open driver after {retries} retries: {e}")
+                raise
+    # Dòng này sẽ không bao giờ được đạt tới nếu vòng lặp hoạt động đúng
     raise WebDriverException("Failed to open driver and navigate to URL after retries")
+
 
 
 def do_payload_with_retries(payload, retries=3):
