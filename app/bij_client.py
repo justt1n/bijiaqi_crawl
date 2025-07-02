@@ -199,6 +199,8 @@ if __name__ == "__main__":
         df = pd.DataFrame(flattened_data)
 
         # Define the desired column order
+        jkljkl
+
         game_cols = [c for c in df.columns if not c.startswith('server_')]
         server_cols = sorted([c for c in df.columns if c.startswith('server_')])
         df = df[game_cols + server_cols]
