@@ -274,9 +274,9 @@ def process(sheet_name):
     sheet_data = read_data_from_sheet(sheet_name)
     payloads = extract_data(sheet_data)
     time_sleep = int(os.getenv('RELAX', 1))
-    print(f"Sleeping for {time_sleep} seconds...")
     for payload_data in payloads:
         ans = do_payload_with_retries(payload_data, retries=int(os.getenv('RETRIES_TIME')))
+        print(f"Sleeping for {time_sleep} seconds...")
         time.sleep(time_sleep)
         if ans is not None:
             print(f"Found a match for {payload_data.name}")
