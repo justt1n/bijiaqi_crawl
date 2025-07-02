@@ -273,7 +273,7 @@ def write_data_to_sheet(data: ItemToSheet, line_number, sheet_name):
 def process(sheet_name):
     sheet_data = read_data_from_sheet(sheet_name)
     payloads = extract_data(sheet_data)
-    time_sleep = int(os.getenv('RELAX', 3))
+    time_sleep = int(os.getenv('RELAX', 1))
     print(f"Sleeping for {time_sleep} seconds...")
     for payload_data in payloads:
         ans = do_payload_with_retries(payload_data, retries=int(os.getenv('RETRIES_TIME')))
