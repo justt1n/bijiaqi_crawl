@@ -23,6 +23,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
 import Payload
+from app.bij_client import get_price_list, load_server_map_from_csv, get_the_lowest_price, ItemToSheet
 
 load_dotenv('settings.env')
 gsp = None
@@ -121,46 +122,6 @@ def find_elements_with_retries(parent_element, by, value, retries=3):
     raise StaleElementReferenceException(f"Failed to find elements by {by}='{value}' after retries")
 
 
-@print_function_name
-def open_driver_with_retries(retries=3):
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new") # Sử dụng chế độ headless mới
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu") # Vẫn nên giữ lại cho headless
-    chrome_options.add_argument("--window-size=1920,1080") # Đặt kích thước cửa sổ ảo
-    chrome_options.add_argument("--disable-dawn-features=use_d3d12")
-    chrome_options.add_argument("--log-level=3")
-    # Thêm User-Agent nếu cần thiết
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" # Ví dụ
-    chrome_options.add_argument(f'user-agent={user_agent}')
-
-    # driver_path được định nghĩa global trong __main__
-    chrome_service = Service(executable_path=driver_path)
-
-    local_driver = None # Sử dụng biến cục bộ
-    for i in range(retries):
-        try:
-            print(f"Attempting to open driver (headless), attempt {i+1}/{retries}")
-            local_driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
-            print(f"Driver opened. Navigating to {os.getenv('DEFAULT_URL')}")
-            local_driver.get(os.getenv('DEFAULT_URL'))
-            print("Navigation successful.")
-            return local_driver
-        except WebDriverException as e:
-            print(f"WebDriverException on attempt {i+1}: {e}")
-            if local_driver:
-                local_driver.quit()
-            if i < retries - 1:
-                time.sleep(1) # Tăng thời gian chờ giữa các lần thử
-            else:
-                logging.error(f"Failed to open driver after {retries} retries: {e}")
-                raise
-    # Dòng này sẽ không bao giờ được đạt tới nếu vòng lặp hoạt động đúng
-    raise WebDriverException("Failed to open driver and navigate to URL after retries")
-
-
-
 def do_payload_with_retries(payload, retries=3):
     for _ in range(retries):
         try:
@@ -195,25 +156,6 @@ def read_file_with_encoding(file_path, encoding='utf-8'):
         return None
 
 
-links = {
-    'windows': {
-        "url": "https://storage.googleapis.com/chrome-for-testing-public/128.0.6613.119/win64/chromedriver-win64.zip",
-        "path": os.path.join('storage', 'chromedriver-win64.zip'),
-        "driver": os.path.join('storage', 'chromedriver-win64', 'chromedriver.exe')
-    },
-    'linux': {
-        "url": "https://storage.googleapis.com/chrome-for-testing-public/128.0.6613.119/linux64/chromedriver-linux64.zip",
-        "path": os.path.join('storage', 'chromedriver-linux64.zip'),
-        "driver": os.path.join('storage', 'chromedriver-linux64', 'chromedriver')
-    },
-    'darwin': {
-        "url": "https://storage.googleapis.com/chrome-for-testing-public/128.0.6613.119/mac-x64/chromedriver-mac-x64.zip",
-        "path": os.path.join('storage', 'chromedriver-mac-x64.zip'),
-        "driver": os.path.join('storage', 'chromedriver-mac-x64', 'chromedriver')
-    }
-}
-
-
 @print_function_name
 def downloadDrive(os_type='windows'):
     if os_type not in links:
@@ -239,18 +181,6 @@ def downloadDrive(os_type='windows'):
 
     print('Driver downloaded and unzipped')
     return driver_path
-
-
-@print_function_name
-def get_drive():
-    system = check_system()
-    if system not in links:
-        raise ValueError(f"Unsupported OS type: {system}")
-
-    print(f"Downloading driver for {system}...")
-    _driver_path = ChromeDriverManager().install()
-
-    return _driver_path
 
 
 def get_gspread(keypath="key.json"):
@@ -300,7 +230,6 @@ def extract_data(data):
     payloads = []
     for data_row in data:
         try:
-            data_row[2] = get_hostname_by_hostid(HOST_DATA, data_row[2])
             payloads.append(Payload.Payload(data_row))
         except Exception as e:
             logging.error(f"An error occurred: {e}")
@@ -308,7 +237,7 @@ def extract_data(data):
     return payloads
 
 
-def write_data_to_sheet(data, line_number, sheet_name):
+def write_data_to_sheet(data: ItemToSheet, line_number, sheet_name):
     try:
         # Ensure line_number is an integer
         line_number = int(line_number)
@@ -325,7 +254,10 @@ def write_data_to_sheet(data, line_number, sheet_name):
             return None
         # Convert data to a list of lists
         note = "Found"
-        data_list = [[note, updated_time] + data.toArray()]
+        data_list = [[
+            note, updated_time, data.name, data.price, data.min_quantity,
+            data.max_quantity, data.deposit, data.delivery_time, "", data.delivery_method
+        ]]
 
         # Update the data in the sheet
         worksheet.update(range_name=range_name, values=data_list)
@@ -341,10 +273,13 @@ def write_data_to_sheet(data, line_number, sheet_name):
 def process(sheet_name):
     sheet_data = read_data_from_sheet(sheet_name)
     payloads = extract_data(sheet_data)
+    time_sleep = int(os.getenv('RELAX', 5))
     for payload_data in payloads:
         ans = do_payload_with_retries(payload_data, retries=int(os.getenv('RETRIES_TIME')))
+        time.sleep(time_sleep)
         if ans is not None:
             print(f"Found a match for {payload_data.name}")
+            ans = ItemToSheet.from_shop_demand(ans)
             write_data_to_sheet(ans, payload_data.sheet_row, sheet_name)
             print(f"Match written to sheet at row {payload_data.sheet_row}")
         else:
@@ -359,86 +294,23 @@ def multi_process():
             process(sheet)
         except Exception as e:
             logging.error(f"Error in process: {e}")
-            driver.refresh()
 
 
 @print_function_name
 def do_payload(payload: Payload.Payload):
-    retries_time = int(os.getenv('RETRIES_TIME'))
     if payload.check is None or int(payload.check) != 1:
-        return
-    host_id = payload.id
-    wait = WebDriverWait(driver, float(os.getenv('TIMEOUT')))
+        return None
 
-    host_id = str(host_id) + " "
-    input_field = wait.until(EC.element_to_be_clickable((By.ID, 'speedhostname')))
-    input_field.send_keys(host_id)
-    input_field.send_keys(Keys.BACKSPACE)
-    input_field.send_keys(Keys.ENTER)
-    time.sleep(1)
-
-    retries = retries_time
-    while retries > 0:
-        try:
-            table = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'td table.tb.bijia.limit')))
-            more_row = driver.find_element(By.XPATH, "//tr[@class='more']")
-            driver.execute_script("arguments[0].click();", more_row)
-            break
-        except StaleElementReferenceException:
-            retries -= 1
-            if retries == 0:
-                raise
-            time.sleep(0.25)
-
-    data_array = []
-
-    for row in find_elements_with_retries(table, By.TAG_NAME, 'tr', retries=retries_time):
-        row_data = []
-        for cell in get_row_elements_with_retries(row, retries=retries_time):
-            cell_text = get_cell_text(cell, retries=retries_time)
-            if cell_text == " ":
-                continue
-            elif cell_text == "卖给他":
-                link_element = find_link_element(cell, retries=retries_time)
-                row_data.append(get_link_attribute(link_element, attribute='href', retries=retries_time))
-            else:
-                row_data.append(cell_text)
-        data_array.append(row_data)
-
-    data_array = data_array[3:-2]
-    results = []
-    for row in data_array:
-        result = Payload.Result(row)
-        results.append(result)
-
-    ans = None
-    for result in results:
-        if result.type in payload.types:
-            if payload.gd_min >= result.min_gold and payload.gd_max <= result.max_gold:
-                if BLACKLIST is not None and result.username.lower() in BLACKLIST:
-                    print(f"User {result.username} is in the blacklist")
-                    logging.info(f"User {result.username} is in the blacklist")
-                    continue
-                ans = result
-                break
-    input_field.clear()
-    return ans
-
-
-def get_hostname_by_hostid(data, hostid):
-    for entry in data:
-        if entry['hostid'] == str(hostid):
-            return entry['hostname']
-    return None
+    item_list = get_price_list(HOST_DATA, int(payload.id))
+    lowest_price = get_the_lowest_price(item_list, payload.types, payload.gd_min, payload.gd_max, BLACKLIST)
+    return lowest_price
 
 
 if __name__ == "__main__":
     load_dotenv('settings.env')
-    driver_path = get_drive()
     gsp = get_gspread(os.getenv('KEY_PATH'))
-    HOST_DATA = read_file_with_encoding(os.getenv('DATA_PATH'), encoding='utf-8')
+    HOST_DATA = load_server_map_from_csv("app/data_mapping.csv")
 
-    driver = open_driver_with_retries(retries=int(os.getenv('RETRIES_TIME')))
     while True:
         clear_screen()
         try:
