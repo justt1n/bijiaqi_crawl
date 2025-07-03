@@ -11,18 +11,11 @@ import gspread
 import wget
 from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
-from selenium import webdriver
 from selenium.common.exceptions import StaleElementReferenceException
 from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
-from webdriver_manager.chrome import ChromeDriverManager
 
-import Payload
+from app import Payload
 from app.bij_client import get_price_list, load_server_map_from_csv, get_the_lowest_price, ItemToSheet
 
 load_dotenv('settings.env')
@@ -154,33 +147,6 @@ def read_file_with_encoding(file_path, encoding='utf-8'):
     except UnicodeDecodeError as e:
         print(f"Error decoding file: {e}")
         return None
-
-
-@print_function_name
-def downloadDrive(os_type='windows'):
-    if os_type not in links:
-        raise ValueError(f"Unsupported OS type: {os_type}")
-
-    url = links[os_type]['url']
-    zip_path = links[os_type]['path']
-    driver_path = links[os_type]['driver']
-
-    print('Start downloading driver...')
-
-    # Ensure the storage directory exists
-    os.makedirs(os.path.dirname(zip_path), exist_ok=True)
-
-    # Download the file
-    wget.download(url, zip_path)
-
-    # Extract the downloaded zip file
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(os.path.join('storage'))
-
-    os.remove(zip_path)
-
-    print('Driver downloaded and unzipped')
-    return driver_path
 
 
 def get_gspread(keypath="key.json"):
