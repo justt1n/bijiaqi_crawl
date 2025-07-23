@@ -424,8 +424,8 @@ def get_the_lowest_price(
     # 2. Loop through all items to filter them
     for item in items:
         # 3. Check if the item matches all conditions
-        if (item.min_quantity >= min_qty and
-                item.sum_quantity <= max_qty and
+        if (item.min_quantity <= min_qty and
+                item.sum_quantity >= max_qty and
                 item.delivery_method_label in allowed_delivery_methods):
             if black_list is not None and item.merchant.store_name not in black_list:
                 filtered_items.append(item)
