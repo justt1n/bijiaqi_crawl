@@ -398,7 +398,7 @@ def get_price_list(server_map: dict, server_id: int) -> list[ShopDemand] | None:
         return None
 
     response = game_service.fetch_shop_demand(game_id, server_id)
-
+    print(f"Fetched {len(response.list)} items for game {game_id}, server {server_id}.")
     if not response or not response.list:
         print(f"No items found for game {game_id}, server {server_id}.")
         return None
@@ -432,7 +432,7 @@ def get_the_lowest_price(
     try:
         # The min() function will raise a ValueError if filtered_items is empty
         return min(filtered_items, key=lambda item: item.price)
-    except ValueError:
+    except ValueError as e:
         return None
 
 
