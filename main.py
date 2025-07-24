@@ -16,7 +16,7 @@ from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 
 from app import Payload
-from app.bij_client import get_price_list, load_server_map_from_csv, get_the_lowest_price, ItemToSheet, \
+from app.bij_client import get_price_list, load_server_map_from_csv, ItemToSheet, \
     get_the_max_price
 
 load_dotenv('settings.env')
