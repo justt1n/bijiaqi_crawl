@@ -4,11 +4,9 @@ import logging
 import os
 import platform
 import time
-import zipfile
 from datetime import datetime
 
 import gspread
-import wget
 from dotenv import load_dotenv
 from oauth2client.service_account import ServiceAccountCredentials
 from selenium.common.exceptions import StaleElementReferenceException
