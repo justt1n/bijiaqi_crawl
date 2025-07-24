@@ -16,7 +16,8 @@ from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 
 from app import Payload
-from app.bij_client import get_price_list, load_server_map_from_csv, get_the_lowest_price, ItemToSheet
+from app.bij_client import get_price_list, load_server_map_from_csv, get_the_lowest_price, ItemToSheet, \
+    get_the_max_price
 
 load_dotenv('settings.env')
 gsp = None
@@ -269,7 +270,7 @@ def do_payload(payload: Payload.Payload):
         return None
 
     item_list = get_price_list(HOST_DATA, int(payload.id))
-    lowest_price = get_the_lowest_price(item_list, payload.types, payload.gd_min, payload.gd_max, BLACKLIST)
+    lowest_price = get_the_max_price(item_list, payload.types, payload.gd_min, payload.gd_max, BLACKLIST)
     return lowest_price
 
 

@@ -406,7 +406,7 @@ def get_price_list(server_map: dict, server_id: int) -> list[ShopDemand] | None:
     return response.list
 
 
-def get_the_lowest_price(
+def get_the_max_price(
         items: List['ShopDemand'],
         delivery_types: str,
         min_qty: int,
@@ -431,7 +431,7 @@ def get_the_lowest_price(
                 filtered_items.append(item)
     try:
         # The min() function will raise a ValueError if filtered_items is empty
-        return min(filtered_items, key=lambda item: item.price)
+        return max(filtered_items, key=lambda item: item.price)
     except ValueError as e:
         return None
 
