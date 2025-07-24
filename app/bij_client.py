@@ -265,7 +265,7 @@ class GameService:
             "categoryId": 1,
             "gameId": game_id,
             "attrIdIndexes": str(server_id),
-            "order": "price,asc",
+            "order": "price,desc",
             "attributeChildrenIds": []
         }
 
