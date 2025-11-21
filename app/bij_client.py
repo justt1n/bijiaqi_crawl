@@ -1,6 +1,4 @@
 import csv
-import datetime
-import json
 import time
 import pandas as pd
 
@@ -88,30 +86,38 @@ class Merchant(FlexibleBaseModel):
 
 
 class ShopDemand(FlexibleBaseModel):
-    """Model cho một 'mặt hàng' trong danh sách 'list'."""
-    id: str
-    title: str
-    price: float
-    sum_quantity: int = Field(alias='sumQuantity')
-    min_quantity: int = Field(alias='minQuantity')
-    effective_quantity: int = Field(alias='effectiveQuantity')
-    unit: str
-    delivery_method_label: str = Field(alias='deliveryMethodLabel')
-    guaranteed: bool
-    deposit: str
-    game_code: str = Field(alias='gameCode')
-    game_name: str = Field(alias='gameName')
-    attr_name_indexes: str = Field(alias='attrNameIndexes')
-    created_at: str = Field(alias='createdAt')
-    merchant: Merchant  # Lồng model Merchant vào đây
+    """Model cho một 'mặt hàng' trong danh sách 'list' (all attributes optional)."""
+    id: Optional[str] = None
+    title: Optional[str] = None
+    price: Optional[float] = None
+    sum_quantity: Optional[int] = Field(default=None, alias='sumQuantity')
+    min_quantity: Optional[int] = Field(default=None, alias='minQuantity')
+    effective_quantity: Optional[int] = Field(default=None, alias='effectiveQuantity')
+    unit: Optional[str] = None
+    delivery_method_label: Optional[str] = Field(default=None, alias='deliveryMethodLabel')
+    guaranteed: Optional[bool] = None
+    deposit: Optional[str] = None
+    game_code: Optional[str] = Field(default=None, alias='gameCode')
+    game_name: Optional[str] = Field(default=None, alias='gameName')
+    attr_name_indexes: Optional[str] = Field(default=None, alias='attrNameIndexes')
+    created_at: Optional[str] = Field(default=None, alias='createdAt')
+    merchant: Optional[Merchant] = None
+
+
+
+class PageInfo(FlexibleBaseModel):
+    """Model for nested pageInfo object in API response."""
+    current_page: int = Field(alias='currentPage')
+    page_size: int = Field(alias='pageSize')
+    total: Optional[int] = None
 
 
 class ShopDemandResponse(FlexibleBaseModel):
     """Model tổng thể cho toàn bộ JSON response."""
-    total: int
     current_page: int = Field(alias='currentPage')
     page_size: int = Field(alias='pageSize')
     list: List[ShopDemand]  # Một danh sách các đối tượng ShopDemand
+    page_info: Optional[PageInfo] = Field(default=None, alias='pageInfo')  # New nested pageInfo object
 
 
 class ItemToSheet(FlexibleBaseModel):
@@ -151,7 +157,14 @@ class ItemToSheet(FlexibleBaseModel):
 
 class GameService:
     API_BASE_URL = "https://www.bijiaqi.com/api/v1/any/shop"
-    HEADERS = {'Content-Type': 'application/json'}
+    HEADERS = {
+        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Origin': 'https://www.bijiaqi.com',
+        'Referer': 'https://www.bijiaqi.com/',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+    }
 
     def __init__(self):
         self.games: List[Game] = []
@@ -220,20 +233,20 @@ class GameService:
             url = f"{self.API_BASE_URL}/home/servers"
             payload = {"gameId": game_id}
 
-            print(f"▶️  Calling API for servers of game ID {game_id} from: {url}...")
+            print(f"Calling API for servers of game ID {game_id} from: {url}...")
 
             response = requests.post(url, headers=self.HEADERS, json=payload, timeout=30)
             response.raise_for_status()
 
             servers_data = response.json()
-            print(f"✅  Successfully retrieved {len(servers_data)} servers for game ID {game_id}.")
+            print(f"Successfully retrieved {len(servers_data)} servers for game ID {game_id}.")
             return servers_data
 
         try:
             result = _make_api_call()
             return result if result is not None else []
         except Exception as e:
-            print(f"❌  All retry attempts failed for game ID {game_id}: {e}")
+            print(f"ERROR: All retry attempts failed for game ID {game_id}: {e}")
             return []
 
     def join_game_with_servers(self):
@@ -260,13 +273,12 @@ class GameService:
     def fetch_shop_demand(self, game_id: int, server_id: int) -> Optional['ShopDemandResponse']:
         url = "https://www.bijiaqi.com/api/shop/demand/listShopDemand"
         payload = {
-            "page": 1,
-            "limit": 100,
+            "isQueryTotal": False,
             "categoryId": 1,
             "gameId": game_id,
             "attrIdIndexes": str(server_id),
-            "order": "price,desc",
-            "attributeChildrenIds": []
+            "loginUserId": "",
+            "limit": 15
         }
 
         # print(f"Calling API for shop demand for game {game_id}, server {server_id}...")
@@ -302,11 +314,15 @@ def load_server_map_from_csv(filepath: str) -> dict:
             for row in reader:
                 if len(row) >= 2:
                     try:
+                        # Check if both values are non-empty
+                        if not row[0].strip() or not row[1].strip():
+                            print(f"Ignoring row with empty values: {row}")
+                            continue
                         game_id = int(row[0])
                         server_id = int(row[1])
                         server_map[server_id] = game_id
                     except ValueError:
-                        print(f"Ignoring {row[0]} as it is not a number.")
+                        print(f"Ignoring malformed row (not valid numbers): game_id='{row[0]}', server_id='{row[1]}'")
     except FileNotFoundError:
         print(f"Can't find {filepath}.")
         return {}
@@ -384,9 +400,9 @@ def crawl_server_data():
 
         output_filename = 'bij_client_games_flattened.csv'
         df.to_csv(output_filename, index=False, encoding='utf-8-sig')
-        print(f"✅  Successfully exported flattened data to {output_filename}")
+        print(f"Successfully exported flattened data to {output_filename}")
     else:
-        print("⚠️  No data available to create a DataFrame.")
+        print("WARNING: No data available to create a DataFrame.")
 
 
 def get_price_list(server_map: dict, server_id: int) -> list[ShopDemand] | None:
@@ -398,48 +414,92 @@ def get_price_list(server_map: dict, server_id: int) -> list[ShopDemand] | None:
         return None
 
     response = game_service.fetch_shop_demand(game_id, server_id)
-    print(f"Fetched {len(response.list)} items for game {game_id}, server {server_id}.")
     if not response or not response.list:
         print(f"No items found for game {game_id}, server {server_id}.")
         return None
 
+    print(f"Fetched {len(response.list)} items for game {game_id}, server {server_id}.")
     return response.list
 
 
 def get_the_max_price(
         items: List['ShopDemand'],
-        delivery_types: str,
+        delivery_types,  # Can be str or list
         min_qty: int,
         max_qty: int,
         black_list = None
 ) -> Optional['ShopDemand']:
     if not items:
+        print(f"WARNING: No items provided to filter")
         return None
 
-    allowed_delivery_methods = {method.strip() for method in delivery_types}
+    print(f"Filtering {len(items)} items with:")
+    print(f"   min_qty={min_qty} (items must require AT MOST this for minimum order)")
+    print(f"   max_qty={max_qty} (items must have AT LEAST this quantity available)")
+    print(f"   delivery_types={delivery_types} (type: {type(delivery_types).__name__})")
+
+    # Handle both string and list inputs
+    if isinstance(delivery_types, str):
+        allowed_delivery_methods = {method.strip() for method in delivery_types.split(',')}
+    elif isinstance(delivery_types, list):
+        allowed_delivery_methods = {method.strip() for method in delivery_types}
+    else:
+        allowed_delivery_methods = set(delivery_types)
+
+    print(f"Allowed delivery methods: {allowed_delivery_methods}")
 
     # Use a generator expression for memory-efficient filtering
     filtered_items = []
 
     # 2. Loop through all items to filter them
-    for item in items:
+    for idx, item in enumerate(items):
+        # Debug first few items
+        if idx < 3:
+            print(f"\nItem {idx+1}:")
+            print(f"   min_quantity={item.min_quantity}, effective_quantity={item.effective_quantity}")
+            print(f"   delivery={item.delivery_method_label}, price={item.price}")
+            print(f"   store={item.merchant.store_name if item.merchant else 'N/A'}")
+
+        # Check each condition
+        min_check = item.min_quantity <= min_qty
+        qty_check = item.effective_quantity >= max_qty
+        delivery_check = item.delivery_method_label in allowed_delivery_methods
+
+        if idx < 3:
+            print(f"   [CHECK] min_quantity ({item.min_quantity}) <= {min_qty}? {min_check}")
+            print(f"   [CHECK] effective_quantity ({item.effective_quantity}) >= {max_qty}? {qty_check}")
+            print(f"   [CHECK] delivery_method in allowed? {delivery_check}")
+
         # 3. Check if the item matches all conditions
-        if (item.min_quantity < min_qty and
-                item.sum_quantity > max_qty and
-                item.delivery_method_label in allowed_delivery_methods):
-            if black_list is not None and item.merchant.store_name not in black_list:
-                filtered_items.append(item)
+        # Logic: Find items where:
+        # - Item's minimum order requirement is LESS than or equal to what user can buy
+        # - Item has ENOUGH quantity available (at least what user wants)
+        # - Delivery method matches
+        if (min_check and qty_check and delivery_check):
+            # Check blacklist
+            if black_list is not None and item.merchant and item.merchant.store_name in black_list:
+                if idx < 3:
+                    print(f"   [BLACKLISTED]: {item.merchant.store_name}")
+                continue
+
+            print(f"[MATCH #{len(filtered_items)+1}] price={item.price}, min={item.min_quantity}, effective={item.effective_quantity}, store={item.merchant.store_name if item.merchant else 'N/A'}")
+            filtered_items.append(item)
+        elif idx < 3:
+            print(f"   [REJECTED]")
+
+    print(f"Filtered to {len(filtered_items)} matching items")
+
     try:
         # The min() function will raise a ValueError if filtered_items is empty
-        return max(filtered_items, key=lambda item: item.price)
+        result = max(filtered_items, key=lambda item: item.price)
+        print(f"Found max price item: {result.price} from {result.merchant.store_name if result.merchant else 'N/A'}")
+        return result
     except ValueError as e:
+        print(f"ERROR: No items matched the filter criteria")
         return None
 
 
 
-# if __name__ == "__main__":
-#     server_map = load_server_map_from_csv("data_mapping.csv")
-#     item_list = get_price_list(server_map, 37196)
-#     cov = get_the_lowest_price(item_list, "即时-拍卖,公会交易,即时-当面,录像-邮寄", 300, 100000)
-#     cov = ItemToSheet.from_shop_demand(cov)
-#     print(cov)
+if __name__ == "__main__":
+    # use crawl_server_data
+    crawl_server_data()

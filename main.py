@@ -115,13 +115,25 @@ def find_elements_with_retries(parent_element, by, value, retries=3):
 
 
 def do_payload_with_retries(payload, retries=3):
-    for _ in range(retries):
+    last_exception = None
+    for attempt in range(retries):
         try:
-            return do_payload(payload)
+            result = do_payload(payload)
+            # If we got a result (even None), that's a success - don't retry
+            return result
         except (StaleElementReferenceException, WebDriverException) as e:
-            logging.error(f"Error in do_payload: {e}")
-            time.sleep(1)
-    raise Exception("Failed to execute do_payload after retries")
+            last_exception = e
+            logging.error(f"Attempt {attempt + 1}/{retries} failed for {payload.name}: {e}")
+            if attempt < retries - 1:  # Don't sleep on the last attempt
+                time.sleep(1)
+        except Exception as e:
+            # For other exceptions, don't retry - just fail
+            logging.error(f"Unexpected error in do_payload for {payload.name}: {e}")
+            return None
+
+    # If we got here, all retries failed
+    logging.error(f"All {retries} attempts failed for {payload.name}: {last_exception}")
+    return None
 
 
 ## End of retry functions
@@ -239,16 +251,39 @@ def process(sheet_name):
     sheet_data = read_data_from_sheet(sheet_name)
     payloads = extract_data(sheet_data)
     time_sleep = int(os.getenv('RELAX', 1))
-    for payload_data in payloads:
-        ans = do_payload_with_retries(payload_data, retries=int(os.getenv('RETRIES_TIME')))
+
+    # Track processed servers to avoid duplicate API calls
+    processed_servers = {}
+
+    for idx, payload_data in enumerate(payloads, 1):
+        # Skip rows where check != 1
+        if payload_data.check is None or int(payload_data.check) != 1:
+            print(f"[{idx}/{len(payloads)}] Skipping row {payload_data.sheet_row} (check={payload_data.check})")
+            continue
+
+        server_id = int(payload_data.id)
+
+        # Check if we've already processed this server in this run
+        if server_id in processed_servers:
+            print(f"[{idx}/{len(payloads)}] Skipping duplicate server {server_id} (row {payload_data.sheet_row})")
+            # Use cached result
+            ans = processed_servers[server_id]
+        else:
+            print(f"[{idx}/{len(payloads)}] Processing server {server_id} (row {payload_data.sheet_row}, name: {payload_data.name})")
+            ans = do_payload_with_retries(payload_data, retries=int(os.getenv('RETRIES_TIME')))
+            # Cache the result
+            processed_servers[server_id] = ans
+
         print(f"Sleeping for {time_sleep} seconds...")
         time.sleep(time_sleep)
+
         if ans is not None:
             print(f"Found a match for {payload_data.name}")
             ans = ItemToSheet.from_shop_demand(ans)
             write_data_to_sheet(ans, payload_data.sheet_row, sheet_name)
             print(f"Match written to sheet at row {payload_data.sheet_row}")
         else:
+            print(f"No match found for {payload_data.name}")
             write_data_to_sheet(ans, payload_data.sheet_row, sheet_name)
 
 
