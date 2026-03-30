@@ -86,10 +86,10 @@ class Merchant(FlexibleBaseModel):
     id: str
     user_id: str = Field(alias='userId')
     store_name: str = Field(alias='storeName')
-    order_completion_rate: float = Field(alias='orderCompletionRate')
-    order_settlement_of_second: int = Field(alias='orderSettlementOfSecond')
-    online: bool
-    created_at: str = Field(alias='createdAt')
+    order_completion_rate: Optional[float] = Field(default=None, alias='orderCompletionRate')
+    order_settlement_of_second: Optional[int] = Field(default=None, alias='orderSettlementOfSecond')
+    online: Optional[bool] = None
+    created_at: Optional[str] = Field(default=None, alias='createdAt')
 
 
 class ShopDemand(FlexibleBaseModel):
