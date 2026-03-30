@@ -293,7 +293,7 @@ class GameService:
         url = "https://www.bijiaqi.com/api/shop/commodity/listShopCommodity"
         payload = {
             "isQueryTotal": False,
-            "categoryId": int(os.getenv("CATEGORY_ID", "3")),
+            "categoryId": int(os.getenv("CATEGORY_ID", "1")),
             "gameId": game_id,
             "attrIdIndexes": str(server_id),
             "loginUserId": "",
