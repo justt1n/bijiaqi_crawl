@@ -194,7 +194,7 @@ def get_blacklist_from_sheet(retries=3):
             spread_sheet = gsp.open_by_url(os.getenv('SPREAD_SHEET_URL')).worksheet(os.getenv('BLACKLIST_SHEET_NAME'))
             data = spread_sheet.get_all_values()
             data = data[1:]
-            flat_data = [item.lower() for sublist in data for item in sublist]
+            flat_data = [" ".join(item.strip().lower().split()) for sublist in data for item in sublist if item.strip()]
             return flat_data
         except Exception as e:
             print(f"An error occurred: {e}. Retrying...")

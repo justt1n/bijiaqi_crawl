@@ -1,4 +1,5 @@
 import csv
+import os
 import time
 import pandas as pd
 
@@ -11,6 +12,12 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict, ValidationIn
 
 
 # ================== ĐỊNH NGHĨA MODEL ĐẦY ĐỦ ==================
+
+
+def normalize_merchant_name(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return " ".join(value.strip().lower().split())
 
 
 class FlexibleBaseModel(BaseModel):
@@ -92,9 +99,12 @@ class ShopDemand(FlexibleBaseModel):
     price: Optional[float] = None
     sum_quantity: Optional[int] = Field(default=None, alias='sumQuantity')
     min_quantity: Optional[int] = Field(default=None, alias='minQuantity')
+    stock_quantity: Optional[int] = Field(default=None, alias='stockQuantity')
     effective_quantity: Optional[int] = Field(default=None, alias='effectiveQuantity')
     unit: Optional[str] = None
     delivery_method_label: Optional[str] = Field(default=None, alias='deliveryMethodLabel')
+    delivery_speed_of_second: Optional[int] = Field(default=None, alias='deliverySpeedOfSecond')
+    avg_delivery_speed_of_second: Optional[int] = Field(default=None, alias='avgDeliverySpeedOfSecond')
     guaranteed: Optional[bool] = None
     deposit: Optional[str] = None
     game_code: Optional[str] = Field(default=None, alias='gameCode')
@@ -134,22 +144,31 @@ class ItemToSheet(FlexibleBaseModel):
         if not demand:
             return None
 
-        def convert_second_to_day(seconds: int) -> int:
+        def convert_second_to_hour(seconds: int) -> int:
             if not isinstance(seconds, int) or seconds < 0:
                 return 0
-            seconds_in_a_day = 24 * 60 * 60
-            days = seconds // seconds_in_a_day
-            return days
+            return max(1, seconds // 3600)
 
-        time_str = str(convert_second_to_day(demand.merchant.order_settlement_of_second)) + "时"
+        settlement_seconds = None
+        if demand.merchant and demand.merchant.order_settlement_of_second is not None:
+            settlement_seconds = demand.merchant.order_settlement_of_second
+        elif demand.delivery_speed_of_second is not None:
+            settlement_seconds = demand.delivery_speed_of_second
+
+        max_quantity = demand.sum_quantity
+        if max_quantity is None:
+            max_quantity = demand.stock_quantity
+        if max_quantity is None:
+            max_quantity = demand.effective_quantity
+
         data_to_validate = {
             "name": demand.merchant.store_name,
             "price": demand.price,
-            "min_quantity": demand.min_quantity,
-            "max_quantity": demand.sum_quantity,
+            "min_quantity": demand.min_quantity if demand.min_quantity is not None else 1,
+            "max_quantity": max_quantity,
             "deposit": demand.deposit,
             "delivery_method": demand.delivery_method_label,
-            "delivery_time": time_str
+            "delivery_time": f"{convert_second_to_hour(settlement_seconds)}时" if settlement_seconds is not None else None,
         }
         return cls.model_validate(data_to_validate)
 
@@ -271,10 +290,10 @@ class GameService:
         reraise=False  # Do not re-raise the exception after the last attempt fails
     )
     def fetch_shop_demand(self, game_id: int, server_id: int) -> Optional['ShopDemandResponse']:
-        url = "https://www.bijiaqi.com/api/shop/demand/listShopDemand"
+        url = "https://www.bijiaqi.com/api/shop/commodity/listShopCommodity"
         payload = {
             "isQueryTotal": False,
-            "categoryId": 1,
+            "categoryId": int(os.getenv("CATEGORY_ID", "3")),
             "gameId": game_id,
             "attrIdIndexes": str(server_id),
             "loginUserId": "",
@@ -418,7 +437,7 @@ def get_price_list(server_map: dict, server_id: int) -> list[ShopDemand] | None:
         print(f"No items found for game {game_id}, server {server_id}.")
         return None
 
-    print(f"Fetched {len(response.list)} items for game {game_id}, server {server_id}.")
+    print(f"Fetched {len(response.list)} commodity items for game {game_id}, server {server_id}.")
     return response.list
 
 
@@ -447,6 +466,11 @@ def get_the_max_price(
         allowed_delivery_methods = set(delivery_types)
 
     print(f"Allowed delivery methods: {allowed_delivery_methods}")
+    normalized_blacklist = {
+        normalize_merchant_name(name) for name in (black_list or []) if normalize_merchant_name(name)
+    }
+    if normalized_blacklist:
+        print(f"Loaded {len(normalized_blacklist)} blacklist entries")
 
     # Use a generator expression for memory-efficient filtering
     filtered_items = []
@@ -456,18 +480,25 @@ def get_the_max_price(
         # Debug first few items
         if idx < 3:
             print(f"\nItem {idx+1}:")
-            print(f"   min_quantity={item.min_quantity}, effective_quantity={item.effective_quantity}")
+            print(f"   min_quantity={item.min_quantity}, stock_quantity={item.stock_quantity}, effective_quantity={item.effective_quantity}")
             print(f"   delivery={item.delivery_method_label}, price={item.price}")
             print(f"   store={item.merchant.store_name if item.merchant else 'N/A'}")
 
         # Check each condition
-        min_check = item.min_quantity <= min_qty
-        qty_check = item.effective_quantity >= max_qty
+        item_min_quantity = item.min_quantity if item.min_quantity is not None else 1
+        item_available_quantity = item.effective_quantity
+        if item_available_quantity is None:
+            item_available_quantity = item.stock_quantity
+        if item_available_quantity is None:
+            item_available_quantity = item.sum_quantity
+
+        min_check = item_min_quantity <= min_qty
+        qty_check = item_available_quantity is not None and item_available_quantity >= max_qty
         delivery_check = item.delivery_method_label in allowed_delivery_methods
 
         if idx < 3:
-            print(f"   [CHECK] min_quantity ({item.min_quantity}) <= {min_qty}? {min_check}")
-            print(f"   [CHECK] effective_quantity ({item.effective_quantity}) >= {max_qty}? {qty_check}")
+            print(f"   [CHECK] min_quantity ({item_min_quantity}) <= {min_qty}? {min_check}")
+            print(f"   [CHECK] available_quantity ({item_available_quantity}) >= {max_qty}? {qty_check}")
             print(f"   [CHECK] delivery_method in allowed? {delivery_check}")
 
         # 3. Check if the item matches all conditions
@@ -477,12 +508,16 @@ def get_the_max_price(
         # - Delivery method matches
         if (min_check and qty_check and delivery_check):
             # Check blacklist
-            if black_list is not None and item.merchant and item.merchant.store_name in black_list:
+            merchant_name = item.merchant.store_name if item.merchant else ""
+            normalized_merchant_name = normalize_merchant_name(merchant_name)
+            if normalized_blacklist and normalized_merchant_name in normalized_blacklist:
                 if idx < 3:
-                    print(f"   [BLACKLISTED]: {item.merchant.store_name}")
+                    print(f"   [BLACKLISTED]: {merchant_name}")
+                else:
+                    print(f"   [BLACKLISTED]: {merchant_name}")
                 continue
 
-            print(f"[MATCH #{len(filtered_items)+1}] price={item.price}, min={item.min_quantity}, effective={item.effective_quantity}, store={item.merchant.store_name if item.merchant else 'N/A'}")
+            print(f"[MATCH #{len(filtered_items)+1}] price={item.price}, min={item_min_quantity}, effective={item_available_quantity}, store={item.merchant.store_name if item.merchant else 'N/A'}")
             filtered_items.append(item)
         elif idx < 3:
             print(f"   [REJECTED]")
